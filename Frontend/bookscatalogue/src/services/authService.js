@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'book_catalogue_token';
+const USER_KEY = 'book_catalogue_user';
 
 const getBaseUrl = () => {
   if (process.env.REACT_APP_API_BASE_URL) {
@@ -22,7 +23,23 @@ export const setAuthToken = (token) => {
   }
 };
 
+export const setUserDetails = (user) => {
+  if (user) {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(USER_KEY);
+  }
+};
+
 export const getAuthToken = () => localStorage.getItem(TOKEN_KEY);
+export const getUserDetails = () => {
+  try {
+    const rawUser = localStorage.getItem(USER_KEY);
+    return rawUser ? JSON.parse(rawUser) : null;
+  } catch (_err) {
+    return null;
+  }
+};
 
 export const getAuthHeaders = () => {
   const token = getAuthToken();
@@ -55,6 +72,16 @@ const request = async (endpoint, options = {}) => {
   return data;
 };
 
+export const updateUserDetails = (payload) =>
+  request('/profile', {
+    method: 'POST',
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
 export const authService = {
   signup: (payload) =>
     request('/api/auth/signup', {
@@ -65,6 +92,26 @@ export const authService = {
   login: (payload) =>
     request('/api/auth/login', {
       method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  changePassword: (payload) =>
+    request('/change-password', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    }),
+
+  updateUserDetails: (payload) =>
+    request('/profile', {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(payload),
     }),
 };

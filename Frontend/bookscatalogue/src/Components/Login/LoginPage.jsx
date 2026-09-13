@@ -3,6 +3,7 @@ import {
   Box,
   Button,
   Checkbox,
+  CircularProgress,
   FormControlLabel,
   IconButton,
   InputAdornment,
@@ -13,12 +14,13 @@ import {
 } from '@mui/material';
 import { BookOpen, User, Lock, Eye, EyeOff, Mail, Phone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { authService, setAuthToken } from '../../services/authService';
+import { authService, setAuthToken, setUserDetails } from '../../services/authService';
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     loginEmail: '',
     loginPassword: '',
@@ -78,6 +80,9 @@ const LoginPage = () => {
       return;
     }
 
+    setErrors((prev) => ({ ...prev, submit: '' }));
+    setIsSubmitting(true);
+
     try {
       const data = await authService.signup({
         name: formData.fullName,
@@ -86,7 +91,14 @@ const LoginPage = () => {
         password: formData.registerPassword,
       });
 
+      const userDetails = {
+        name: data.user?.name || formData.fullName,
+        email: data.user?.email || formData.registerEmail,
+        phoneNumber: data.user?.phoneNumber || formData.phone,
+      };
+
       setAuthToken(data.token);
+      setUserDetails(userDetails);
       console.log('User registered successfully:', data);
       setIsRegister(false);
       setFormData((prev) => ({
@@ -103,6 +115,8 @@ const LoginPage = () => {
         ...prev,
         submit: error.message,
       }));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -111,13 +125,23 @@ const LoginPage = () => {
       return;
     }
 
+    setErrors((prev) => ({ ...prev, submit: '' }));
+    setIsSubmitting(true);
+
     try {
       const data = await authService.login({
         email: formData.loginEmail,
         password: formData.loginPassword,
       });
+      console.log(data);
+      const userDetails = {
+        name: data.name || formData.loginEmail,
+        email: data.email || formData.loginEmail,
+        phoneNumber: data.phoneNumber || '',
+      };
 
       setAuthToken(data.token);
+      setUserDetails(userDetails);
       console.log('User logged in successfully:', data);
       setErrors({});
       navigate('/books');
@@ -126,6 +150,8 @@ const LoginPage = () => {
         ...prev,
         submit: error.message,
       }));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -157,6 +183,23 @@ const LoginPage = () => {
       </Stack>
 
       <Stack spacing={3} sx={{ mt: 2 }}>
+        {errors.submit && (
+          <Box
+            sx={{
+              bgcolor: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#b42318',
+              borderRadius: 2,
+              px: 2,
+              py: 1.25,
+              fontWeight: 600,
+              fontSize: '0.95rem',
+            }}
+          >
+            {errors.submit}
+          </Box>
+        )}
+
         <Box>
           <Typography sx={{ fontWeight: 600, color: '#2b2b2b', mb: 1, fontSize: '0.95rem' }}>
             Email
@@ -250,6 +293,7 @@ const LoginPage = () => {
           fullWidth
           variant="contained"
           onClick={loginUser}
+          disabled={isSubmitting}
           sx={{
             mt: 1,
             background: 'linear-gradient(90deg, #4a2e8a 0%, #4b2c7a 100%)',
@@ -261,9 +305,11 @@ const LoginPage = () => {
             textTransform: 'none',
             boxShadow: 'none',
             '&:hover': { background: 'linear-gradient(90deg, #422779 0%, #41286d 100%)' },
+            '&.Mui-disabled': { background: '#c4b5fd', color: '#fff' },
           }}
+          startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : null}
         >
-          Sign In →
+          {isSubmitting ? 'Signing In...' : 'Sign In →'}
         </Button>
 
         <Typography align="center" sx={{ color: '#4b5563', fontSize: '1rem', mt: 1 }}>
@@ -272,6 +318,7 @@ const LoginPage = () => {
             component="button"
             onClick={(e) => {
               e.preventDefault();
+              setErrors({});
               setIsRegister(true);
             }}
             sx={{ color: '#5d3a9b', fontWeight: 700, textDecoration: 'none' }}
@@ -311,6 +358,23 @@ const LoginPage = () => {
       </Stack>
 
       <Stack spacing={3} sx={{ mt: 2 }}>
+        {errors.submit && (
+          <Box
+            sx={{
+              bgcolor: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#b42318',
+              borderRadius: 2,
+              px: 2,
+              py: 1.25,
+              fontWeight: 600,
+              fontSize: '0.95rem',
+            }}
+          >
+            {errors.submit}
+          </Box>
+        )}
+
         <Box>
           <Typography sx={{ fontWeight: 600, color: '#2b2b2b', mb: 1, fontSize: '0.95rem' }}>
             Full Name
@@ -459,6 +523,7 @@ const LoginPage = () => {
           fullWidth
           variant="contained"
           onClick={registerUser}
+          disabled={isSubmitting}
           sx={{
             mt: 1,
             background: 'linear-gradient(90deg, #4a2e8a 0%, #4b2c7a 100%)',
@@ -470,9 +535,11 @@ const LoginPage = () => {
             textTransform: 'none',
             boxShadow: 'none',
             '&:hover': { background: 'linear-gradient(90deg, #422779 0%, #41286d 100%)' },
+            '&.Mui-disabled': { background: '#c4b5fd', color: '#fff' },
           }}
+          startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : null}
         >
-          Create Account →
+          {isSubmitting ? 'Creating Account...' : 'Create Account →'}
         </Button>
 
         <Typography align="center" sx={{ color: '#4b5563', fontSize: '1rem', mt: 1 }}>
@@ -481,6 +548,7 @@ const LoginPage = () => {
             component="button"
             onClick={(e) => {
               e.preventDefault();
+              setErrors({});
               setIsRegister(false);
             }}
             sx={{ color: '#5d3a9b', fontWeight: 700, textDecoration: 'none' }}

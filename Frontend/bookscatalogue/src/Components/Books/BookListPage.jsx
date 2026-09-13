@@ -12,9 +12,11 @@ import {
   Typography,
 } from '@mui/material';
 import { Html5Qrcode } from 'html5-qrcode';
-import { BookOpen, LogOut, ScanLine, Plus } from 'lucide-react';
+import { BookOpen, LogOut, ScanLine, Plus, Camera, User, RefreshCcw } from 'lucide-react';
 import { bookService } from '../../services/bookService';
-import { setAuthToken } from '../../services/authService';
+import { getUserDetails, setAuthToken, setUserDetails } from '../../services/authService';
+import BarcodeScannerPanel from './BarcodeScannerPanel';
+import UserDetailsDialog from './UserDetailsDialog';
 
 const BookListPage = () => {
   const navigate = useNavigate();
@@ -28,6 +30,10 @@ const BookListPage = () => {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannerError, setScannerError] = useState('');
   const [toast, setToast] = useState('');
+  const [cameraList, setCameraList] = useState([]);
+  const [cameraIndex, setCameraIndex] = useState(0);
+  const [showUserDetails, setShowUserDetails] = useState(false);
+  const [userDetails, setUserDetailsState] = useState(() => getUserDetails());
 
   useEffect(() => {
     const fetchBooks = async () => {
@@ -58,7 +64,22 @@ const BookListPage = () => {
 
   const handleLogout = () => {
     setAuthToken(null);
+    setUserDetails(null);
+    setUserDetailsState(null);
     navigate('/');
+  };
+
+  const handleOpenUserDetails = () => {
+    const currentUser = getUserDetails();
+    setUserDetailsState(currentUser || userDetails);
+    setShowUserDetails(true);
+  };
+
+  const handleUserUpdated = (updatedUser) => {
+    setUserDetailsState(updatedUser);
+    setUserDetails(updatedUser);
+    console.log(updatedUser);
+    showToast('User name updated successfully');
   };
 
   const loadBooks = useCallback(async () => {
@@ -100,6 +121,7 @@ const BookListPage = () => {
         setIsbnInput('');
         await loadBooks();
       } catch (err) {
+        console.log(err);
         const message = err.message || 'Unable to add book';
         setError('');
         setIsbnInput('');
@@ -134,8 +156,94 @@ const BookListPage = () => {
     }
 
     scannerRef.current = null;
+    setCameraList([]);
+    setCameraIndex(0);
     setIsScannerOpen(false);
   };
+
+  const choosePreferredCamera = (cameras = []) => {
+    if (!cameras.length) {
+      return { id: { facingMode: 'environment' }, label: 'environment' };
+    }
+
+    const rearCamera = cameras.find((camera) => /rear|back|environment/i.test(camera.label || '')) || cameras[0];
+    return rearCamera;
+  };
+
+  const startScannerWithCamera = useCallback(
+    async (targetCamera = null) => {
+      const scanner = new Html5Qrcode('book-scanner-reader');
+      scannerRef.current = scanner;
+
+      const cameras = await Html5Qrcode.getCameras();
+      const availableCameras = Array.isArray(cameras) ? cameras : [];
+      setCameraList(availableCameras);
+
+      const selectedCamera = targetCamera || choosePreferredCamera(availableCameras);
+      const selectedCameraId = selectedCamera && typeof selectedCamera === 'object' && 'id' in selectedCamera ? selectedCamera.id : selectedCamera;
+      const selectedIndex = availableCameras.findIndex((camera) => camera.id === selectedCameraId);
+      if (selectedIndex >= 0) {
+        setCameraIndex(selectedIndex);
+      }
+
+      await scanner.start(
+        selectedCameraId,
+        {
+          fps: 10,
+          qrbox: { width: 260, height: 150 },
+          aspectRatio: 1.33,
+        },
+        async (decodedText) => {
+          const normalizedIsbn = decodedText.replace(/[^0-9xX]/g, '').toUpperCase();
+          const isbnToUse = normalizedIsbn || decodedText.trim();
+
+          if (!isbnToUse) return;
+
+          setIsbnInput(isbnToUse);
+          setIsScannerOpen(false);
+
+          try {
+            await scanner.stop();
+            await scanner.clear();
+          } catch (_err) {
+            // Ignore cleanup errors.
+          }
+
+          scannerRef.current = null;
+          await handleAddBook(isbnToUse);
+        },
+        (scanError) => {
+          if (scanError && typeof scanError === 'string' && scanError.includes('NotFound')) {
+            return;
+          }
+        }
+      );
+    },
+    [handleAddBook]
+  );
+
+  const switchCamera = useCallback(async () => {
+    if (!scannerRef.current || cameraList.length < 2) {
+      return;
+    }
+
+    const nextIndex = (cameraIndex + 1) % cameraList.length;
+    const nextCamera = cameraList[nextIndex];
+    setCameraIndex(nextIndex);
+
+    try {
+      await scannerRef.current.stop();
+      await scannerRef.current.clear();
+    } catch (_err) {
+      // Ignore cleanup errors.
+    }
+
+    try {
+      await startScannerWithCamera(nextCamera);
+    } catch (err) {
+      setScannerError('Unable to switch camera. Please try again.');
+    }
+  }, [cameraIndex, cameraList, startScannerWithCamera]);
 
   useEffect(() => {
     if (!isScannerOpen) {
@@ -145,53 +253,23 @@ const BookListPage = () => {
     setError('');
     setScannerError('');
 
-    const scannerElement = document.getElementById('book-scanner-reader');
-    if (!scannerElement) {
-      setScannerError('Scanner container is not ready yet. Please try again.');
-      return;
-    }
+    let cancelled = false;
 
     const startScan = async () => {
       try {
-        const scanner = new Html5Qrcode('book-scanner-reader');
-        scannerRef.current = scanner;
-
         const cameras = await Html5Qrcode.getCameras();
-        const cameraId = cameras && cameras.length > 0 ? cameras[0].id : { facingMode: 'environment' };
+        const availableCameras = Array.isArray(cameras) ? cameras : [];
+        setCameraList(availableCameras);
 
-        await scanner.start(
-          cameraId,
-          {
-            fps: 10,
-            qrbox: { width: 260, height: 150 },
-            aspectRatio: 1.33,
-          },
-          async (decodedText) => {
-            const normalizedIsbn = decodedText.replace(/[^0-9xX]/g, '').toUpperCase();
-            const isbnToUse = normalizedIsbn || decodedText.trim();
+        const preferredCamera = choosePreferredCamera(availableCameras);
+        const cameraId = preferredCamera && preferredCamera.id ? preferredCamera.id : { facingMode: 'environment' };
 
-            if (!isbnToUse) return;
-
-            setIsbnInput(isbnToUse);
-            setIsScannerOpen(false);
-
-            try {
-              await scanner.stop();
-              await scanner.clear();
-            } catch (_err) {
-              // Ignore cleanup errors.
-            }
-
-            scannerRef.current = null;
-            await handleAddBook(isbnToUse);
-          },
-          (scanError) => {
-            if (scanError && typeof scanError === 'string' && scanError.includes('NotFound')) {
-              return;
-            }
-          }
-        );
+        await startScannerWithCamera(cameraId);
       } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
         setScannerError('Unable to start the camera. Please allow camera access and use localhost or HTTPS.');
         setIsScannerOpen(false);
         if (scannerRef.current) {
@@ -205,18 +283,31 @@ const BookListPage = () => {
       }
     };
 
-    const timeoutId = setTimeout(() => {
+    const retryUntilMounted = () => {
+      if (cancelled) {
+        return;
+      }
+
+      const scannerElement = document.getElementById('book-scanner-reader');
+      if (!scannerElement) {
+        window.setTimeout(retryUntilMounted, 150);
+        return;
+      }
+
       startScan();
-    }, 150);
+    };
+
+    const timeoutId = window.setTimeout(retryUntilMounted, 150);
 
     return () => {
-      clearTimeout(timeoutId);
+      cancelled = true;
+      window.clearTimeout(timeoutId);
       if (scannerRef.current) {
         scannerRef.current.clear().catch(() => {});
         scannerRef.current = null;
       }
     };
-  }, [handleAddBook, isScannerOpen]);
+  }, [isScannerOpen, startScannerWithCamera]);
 
   const handleScanBarcode = () => {
     setIsScannerOpen(true);
@@ -257,20 +348,36 @@ const BookListPage = () => {
             </Typography>
           </Stack>
 
-          <Button
-            variant="outlined"
-            startIcon={<LogOut size={18} />}
-            onClick={handleLogout}
-            sx={{
-              borderColor: '#d4d4d4',
-              color: '#333',
-              textTransform: 'none',
-              borderRadius: 2,
-              fontWeight: 600,
-            }}
-          >
-            Logout
-          </Button>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+            <Button
+              variant="outlined"
+              startIcon={<User size={18} />}
+              onClick={handleOpenUserDetails}
+              sx={{
+                borderColor: '#d4d4d4',
+                color: '#333',
+                textTransform: 'none',
+                borderRadius: 2,
+                fontWeight: 600,
+              }}
+            >
+              User Details
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<LogOut size={18} />}
+              onClick={handleLogout}
+              sx={{
+                borderColor: '#d4d4d4',
+                color: '#333',
+                textTransform: 'none',
+                borderRadius: 2,
+                fontWeight: 600,
+              }}
+            >
+              Logout
+            </Button>
+          </Stack>
         </Stack>
 
         {toast && (
@@ -380,48 +487,20 @@ const BookListPage = () => {
           />
         </Box>
 
-        {isScannerOpen && (
-          <Box sx={{ bgcolor: '#fff', borderRadius: 3, p: 3, border: '1px solid #e2e2e2', mb: 4 }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                Scan book barcode
-              </Typography>
-              <Button
-                variant="outlined"
-                onClick={stopScanner}
-                sx={{
-                  borderColor: '#d4d4d4',
-                  color: '#333',
-                  textTransform: 'none',
-                  borderRadius: 2,
-                  fontWeight: 600,
-                }}
-              >
-                Close camera
-              </Button>
-            </Stack>
-            <Typography sx={{ color: '#4b5563', mb: 2 }}>
-              Point the camera at the book’s ISBN barcode and keep it centered in the box.
-            </Typography>
-            <Box
-              id="book-scanner-reader"
-              sx={{
-                width: '100%',
-                maxWidth: 420,
-                minHeight: 320,
-                height: 320,
-                mx: 'auto',
-                borderRadius: 2,
-                overflow: 'hidden',
-                border: '1px solid #e2e2e2',
-                backgroundColor: '#000',
-              }}
-            />
-            {scannerError && (
-              <Typography sx={{ color: '#b42318', mt: 2, fontWeight: 600 }}>{scannerError}</Typography>
-            )}
-          </Box>
-        )}
+        <BarcodeScannerPanel
+          isScannerOpen={isScannerOpen}
+          cameraList={cameraList}
+          scannerError={scannerError}
+          switchCamera={switchCamera}
+          stopScanner={stopScanner}
+        />
+
+        <UserDetailsDialog
+          open={showUserDetails}
+          user={userDetails}
+          onClose={() => setShowUserDetails(false)}
+          onUserUpdated={handleUserUpdated}
+        />
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
