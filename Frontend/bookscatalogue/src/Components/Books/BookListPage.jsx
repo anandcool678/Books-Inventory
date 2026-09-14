@@ -7,6 +7,8 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  MenuItem,
+  Select,
   Stack,
   TextField,
   Typography,
@@ -18,6 +20,12 @@ import { getUserDetails, setAuthToken, setUserDetails } from '../../services/aut
 import BarcodeScannerPanel from './BarcodeScannerPanel';
 import UserDetailsDialog from './UserDetailsDialog';
 
+const READING_STATUS_OPTIONS = [
+  { value: 'TBR', label: 'To be Read' },
+  { value: 'reading', label: 'Currently reading' },
+  { value: 'read', label: 'Read' },
+];
+
 const BookListPage = () => {
   const navigate = useNavigate();
   const scannerRef = useRef(null);
@@ -26,6 +34,7 @@ const BookListPage = () => {
   const [error, setError] = useState('');
   const [isbnInput, setIsbnInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showOnlyTbr, setShowOnlyTbr] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannerError, setScannerError] = useState('');
@@ -313,7 +322,96 @@ const BookListPage = () => {
     setIsScannerOpen(true);
   };
 
+  const normalizeReadDate = (value) => {
+    if (!value) {
+      return '';
+    }
+
+    if (typeof value === 'string') {
+      return value.split('T')[0];
+    }
+
+    if (value instanceof Date) {
+      const year = value.getFullYear();
+      const month = String(value.getMonth() + 1).padStart(2, '0');
+      const day = String(value.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    return '';
+  };
+
+  const handleReadingStatusChange = (bookKey, nextStatus) => {
+    const selectedBook = books.find((book) => (book.id || book.isbn) === bookKey);
+    const nextFinishDate = nextStatus === 'read'
+      ? (selectedBook?.readOn ? normalizeReadDate(selectedBook.readOn) : new Date().toISOString().split('T')[0])
+      : '';
+
+    setBooks((prevBooks) =>
+      prevBooks.map((book) => {
+        const currentKey = book.id || book.isbn;
+        if (currentKey !== bookKey) return book;
+
+        const updatedBook = { ...book, status: nextStatus };
+        if (nextStatus === 'read') {
+          updatedBook.readOn = nextFinishDate;
+        } else {
+          delete updatedBook.readOn;
+        }
+
+        return updatedBook;
+      })
+    );
+
+    const body = {
+      status: nextStatus,
+      ...(nextStatus === 'read' ? { readOn: nextFinishDate } : {}),
+    };
+
+    bookService.updateBookStatus(bookKey, body).catch(() => {});
+  };
+
+  const getTodayDateString = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const handleFinishDateChange = (bookKey, finishDate) => {
+    const selectedDate = finishDate ? new Date(`${finishDate}T00:00:00`) : null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (selectedDate && selectedDate > today) {
+      return;
+    }
+
+    const readOn = finishDate ? `${finishDate}T00:00:00` : '';
+
+    setBooks((prevBooks) =>
+      prevBooks.map((book) => {
+        const currentKey = book.id || book.isbn;
+        if (currentKey !== bookKey) return book;
+
+        return {
+          ...book,
+          status: 'read',
+          readOn,
+        };
+      })
+    );
+
+    bookService.updateBookStatus(bookKey, { status: 'read', readOn }).catch(() => {});
+  };
+
   const filteredBooks = books.filter((book) => {
+    const matchesStatus = !showOnlyTbr || (book.status || 'TBR') === 'TBR';
+    if (!matchesStatus) {
+      return false;
+    }
+
     const query = searchTerm.toLowerCase().trim();
     if (!query) return true;
 
@@ -466,9 +564,28 @@ const BookListPage = () => {
         </Box>
 
         <Box sx={{ bgcolor: '#fff', borderRadius: 3, p: 3, border: '1px solid #e2e2e2', mb: 4 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-            Search Books
-          </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              Search Books
+            </Typography>
+
+            <Button
+              variant={showOnlyTbr ? 'contained' : 'outlined'}
+              onClick={() => setShowOnlyTbr((prev) => !prev)}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 700,
+                background: showOnlyTbr ? 'linear-gradient(90deg, #4a2e8a 0%, #4b2c7a 100%)' : 'transparent',
+                color: showOnlyTbr ? '#fff' : '#333',
+                borderColor: '#d4d4d4',
+                px: 2.5,
+              }}
+            >
+              {showOnlyTbr ? 'Showing TBR only' : 'Show TBR only'}
+            </Button>
+          </Stack>
+
           <TextField
             fullWidth
             value={searchTerm}
@@ -534,77 +651,131 @@ const BookListPage = () => {
               </Box>
             ) : (
               <Stack spacing={2}>
-                {filteredBooks.map((book) => (
-                  <Card key={book.id || book.isbn} sx={{ borderRadius: 3, border: '1px solid #e2e2e2', boxShadow: 'none' }}>
-                    <CardContent sx={{ p: 3 }}>
-                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
-                        <Box
-                          sx={{
-                            width: 90,
-                            minWidth: 90,
-                            height: 130,
-                            borderRadius: 2,
-                            overflow: 'hidden',
-                            bgcolor: '#f1ecff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            border: '1px solid #e2e2e2',
-                          }}
-                        >
-                          {book.coverImage ? (
-                            <img
-                              src={book.coverImage}
-                              alt={book.title || 'Book cover'}
-                              style={{
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'cover',
-                                display: 'block',
+                {filteredBooks.map((book) => {
+                  const bookKey = book.id || book.isbn;
+                  const currentStatus = book.status || 'TBR';
+                  const readOnValue = normalizeReadDate(book.readOn);
+
+                  return (
+                    <Card key={bookKey} sx={{ borderRadius: 3, border: '1px solid #e2e2e2', boxShadow: 'none' }}>
+                      <CardContent sx={{ p: 3 }}>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center" justifyContent="space-between">
+                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center" sx={{ flex: 1 }}>
+                            <Box
+                              sx={{
+                                width: 90,
+                                minWidth: 90,
+                                height: 130,
+                                borderRadius: 2,
+                                overflow: 'hidden',
+                                bgcolor: '#f1ecff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                border: '1px solid #e2e2e2',
                               }}
-                            />
-                          ) : (
-                            <BookOpen size={32} color="#5d3a9b" />
-                          )}
-                        </Box>
+                            >
+                              {book.coverImage ? (
+                                <img
+                                  src={book.coverImage}
+                                  alt={book.title || 'Book cover'}
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover',
+                                    display: 'block',
+                                  }}
+                                />
+                              ) : (
+                                <BookOpen size={32} color="#5d3a9b" />
+                              )}
+                            </Box>
 
-                        <Box sx={{ flex: 1 }}>
-                          <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-                            {book.title || 'Untitled Book'}
-                          </Typography>
-                          <Typography sx={{ color: '#6b7280', mb: 1 }}>
-                            ISBN: {book.isbn || 'N/A'}
-                          </Typography>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
+                                {book.title || 'Untitled Book'}
+                              </Typography>
 
-                          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
-                            {book.authors && book.authors.length > 0 ? (
-                              book.authors.slice(0, 2).map((author, index) => (
-                                <Chip key={`${book.id}-author-${index}`} label={author} sx={{ bgcolor: '#f1ecff', color: '#5d3a9b' }} />
-                              ))
-                            ) : (
-                              <Chip label="Unknown author" sx={{ bgcolor: '#f3f4f6', color: '#4b5563' }} />
+                              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+                                {book.authors && book.authors.length > 0 ? (
+                                  book.authors.slice(0, 2).map((author, index) => (
+                                    <Chip key={`${bookKey}-author-${index}`} label={author} sx={{ bgcolor: '#f1ecff', color: '#5d3a9b' }} />
+                                  ))
+                                ) : (
+                                  <Chip label="Unknown author" sx={{ bgcolor: '#f3f4f6', color: '#4b5563' }} />
+                                )}
+                              </Stack>
+
+                              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ color: '#4b5563', fontSize: '0.95rem' }}>
+                                <Typography>
+                                  Pages: {book.pageCount || 'N/A'}
+                                </Typography>
+                                <Typography>
+                                  Added on: {book.createdAt
+                                    ? new Date(book.createdAt).toLocaleDateString('en-GB', {
+                                        day: '2-digit',
+                                        month: 'short',
+                                        year: 'numeric',
+                                      })
+                                    : 'N/A'}
+                                </Typography>
+                              </Stack>
+                            </Box>
+                          </Stack>
+
+                          <Box sx={{ minWidth: { xs: '100%', sm: 190 }, alignSelf: { xs: 'stretch', sm: 'center' } }}>
+                            <Select
+                              value={currentStatus}
+                              onChange={(event) => handleReadingStatusChange(bookKey, event.target.value)}
+                              size="small"
+                              displayEmpty
+                              sx={{
+                                width: '100%',
+                                borderRadius: 1.5,
+                                backgroundColor: '#faf7ff',
+                                '& .MuiOutlinedInput-notchedOutline': { borderColor: '#d4d4d4' },
+                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#b8b8b8' },
+                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#5d3a9b', borderWidth: 2 },
+                                '& .MuiSelect-select': { py: 1, fontSize: '0.85rem', fontWeight: 600 },
+                              }}
+                            >
+                              {READING_STATUS_OPTIONS.map((option) => (
+                                <MenuItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </MenuItem>
+                              ))}
+                            </Select>
+
+                            {currentStatus === 'read' && (
+                              <TextField
+                                type="date"
+                                label="Finish date"
+                                value={readOnValue}
+                                onChange={(event) => handleFinishDateChange(bookKey, event.target.value)}
+                                size="small"
+                                InputLabelProps={{ shrink: true }}
+                                inputProps={{
+                                  max: getTodayDateString(),
+                                }}
+                                sx={{
+                                  mt: 1.5,
+                                  width: '100%',
+                                  '& .MuiOutlinedInput-root': {
+                                    borderRadius: 1.5,
+                                    backgroundColor: '#faf7ff',
+                                    '& fieldset': { borderColor: '#d4d4d4' },
+                                    '&:hover fieldset': { borderColor: '#b8b8b8' },
+                                    '&.Mui-focused fieldset': { borderColor: '#5d3a9b', borderWidth: 2 },
+                                  },
+                                }}
+                              />
                             )}
-                          </Stack>
-
-                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ color: '#4b5563', fontSize: '0.95rem' }}>
-                            <Typography>
-                              Pages: {book.pageCount || 'N/A'}
-                            </Typography>
-                            <Typography>
-                              Added on: {book.createdAt
-                                ? new Date(book.createdAt).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric',
-                                  })
-                                : 'N/A'}
-                            </Typography>
-                          </Stack>
-                        </Box>
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                ))}
+                          </Box>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </Stack>
             )}
           </>

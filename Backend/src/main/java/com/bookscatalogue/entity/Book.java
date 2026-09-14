@@ -34,6 +34,7 @@ public class Book {
     private LocalDateTime updatedAt;
     private boolean isRead;
     private LocalDateTime readOn;
+    private String status;
 
     public Book() {
     }
@@ -58,6 +59,7 @@ public class Book {
         this.updatedAt = now;
         this.isRead = false;
         this.readOn = null;
+        this.status = "TBR";
     }
 
     public String getId() {
@@ -193,5 +195,13 @@ public class Book {
 
     public void setReadOn(LocalDateTime readOn) {
         this.readOn = readOn;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 }

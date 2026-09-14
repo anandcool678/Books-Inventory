@@ -16,4 +16,11 @@ export const bookService = {
       },
       body: JSON.stringify(body),
     }),
+  
+  updateBookStatus: (bookId, status) =>
+    request(`/api/books/${bookId}/update`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(status ),
+    })
 };

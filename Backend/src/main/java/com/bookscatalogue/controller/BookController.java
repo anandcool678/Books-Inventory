@@ -34,10 +34,10 @@ public class BookController {
         return ResponseEntity.ok(books);
     }
 
-    @PatchMapping("/update")
-    public ResponseEntity<Book> updateBook(@Valid @RequestBody Book book, Principal principal){
+    @PatchMapping("{bookId}/update")
+    public ResponseEntity<Book> updateBook(@PathVariable String bookId, @Valid @RequestBody Book book, Principal principal){
         String currentUserEmail = principal.getName();
-        Book updatedBook = bookService.updateBook(book, currentUserEmail);
+        Book updatedBook = bookService.updateBook(bookId, book, currentUserEmail);
         return ResponseEntity.ok(updatedBook);
     }
 

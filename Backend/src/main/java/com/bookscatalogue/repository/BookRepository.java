@@ -12,8 +12,9 @@ import java.util.Optional;
 public interface BookRepository extends MongoRepository<Book, String> {
     Optional<Book> findByIsbnAndUserId(String isbn, String userId);
     List<Book> findByUserIdOrderByCreatedAtDesc(String userId);
+    Optional<Book> findById(String id);
 
-    @Query("{'userId': ?0, 'isRead': false}")
+    @Query("{'userId': ?0, 'status': 'TBR'}")
     List<Book> findByUserIdTBR(String userId);
     boolean existsByIsbnAndUserId(String isbn, String userId);
 }

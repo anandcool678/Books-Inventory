@@ -41,12 +41,13 @@ public class BookService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found for email: " + email));
 
-        return bookRepository.findByIsbnAndUserId(normalizedIsbn, userId)
-                .orElseGet(() -> {
-                    Book savedBook = saveBookFromApi(normalizedIsbn, userId);
-                    emailService.sendBookAddedEmail(user.getEmail(), user.getName(), savedBook.getTitle(), savedBook.getIsbn());
-                    return savedBook;
-                });
+        if (bookRepository.existsByIsbnAndUserId(normalizedIsbn, userId)) {
+            throw new IllegalArgumentException("Book already exists");
+        }
+
+        Book savedBook = saveBookFromApi(normalizedIsbn, userId);
+//        emailService.sendBookAddedEmail(user.getEmail(), user.getName(), savedBook.getTitle(), savedBook.getIsbn());
+        return savedBook;
     }
 
     public List<Book> getBooksByCurrentUser(String currentUserEmail) {
@@ -98,6 +99,7 @@ public class BookService {
         book.setSource("openlibrary");
         book.setRead(false);
         book.setReadOn(null);
+        book.setStatus("TBR");
 
         LocalDateTime now = LocalDateTime.now();
         book.setCreatedAt(now);
@@ -201,13 +203,20 @@ public class BookService {
         return null;
     }
     
-    public Book updateBook(Book book, String currentUserEmail) {
+    public Book updateBook(String bookId, Book book, String currentUserEmail) {
         String email = resolveUserId(normalizeUserEmail(currentUserEmail));
 
-        Book updatedBook = bookRepository.findByIsbnAndUserId(book.getIsbn(), email)
-                .orElseThrow(() -> new IllegalArgumentException("Book not found with ID: " + book.getIsbn()));
+        Book updatedBook = bookRepository.findById(bookId)
+                .orElseThrow(() -> new IllegalArgumentException("Book not found with ID: " + bookId));
         updatedBook.setRead(book.isRead());
         updatedBook.setReadOn(book.getReadOn());
+        updatedBook.setStatus(book.getStatus());
+        if(book.getStatus().equals("read") && book.getReadOn() == null) {
+            updatedBook.setReadOn(LocalDateTime.now());
+        }
+        else if(book.getStatus().equals("read") && book.getReadOn() != null) {
+            updatedBook.setReadOn(book.getReadOn());
+        }
         updatedBook.setUpdatedAt(LocalDateTime.now());
         return bookRepository.save(updatedBook);
 
