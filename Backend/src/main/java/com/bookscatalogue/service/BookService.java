@@ -96,6 +96,8 @@ public class BookService {
         book.setLanguage(extractLanguage(bookData.get("languages")));
         book.setCoverImage(extractCoverImage(bookData.get("cover")));
         book.setSource("openlibrary");
+        book.setRead(false);
+        book.setReadOn(null);
 
         LocalDateTime now = LocalDateTime.now();
         book.setCreatedAt(now);
@@ -197,5 +199,24 @@ public class BookService {
             }
         }
         return null;
+    }
+    
+    public Book updateBook(Book book, String currentUserEmail) {
+        String email = resolveUserId(normalizeUserEmail(currentUserEmail));
+
+        Book updatedBook = bookRepository.findByIsbnAndUserId(book.getIsbn(), email)
+                .orElseThrow(() -> new IllegalArgumentException("Book not found with ID: " + book.getIsbn()));
+        updatedBook.setRead(book.isRead());
+        updatedBook.setReadOn(book.getReadOn());
+        updatedBook.setUpdatedAt(LocalDateTime.now());
+        return bookRepository.save(updatedBook);
+
+    }
+
+    public List<Book> getTBRByCurrentUser(String currentUserEmail){
+        String userId = resolveUserId(currentUserEmail);
+        List<Book> allBooks = bookRepository.findByUserIdTBR(userId);
+
+        return allBooks;
     }
 }

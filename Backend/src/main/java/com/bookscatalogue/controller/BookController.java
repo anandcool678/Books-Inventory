@@ -5,13 +5,10 @@ import com.bookscatalogue.entity.Book;
 import com.bookscatalogue.service.BookService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -34,6 +31,19 @@ public class BookController {
     @GetMapping("/my-books")
     public ResponseEntity<List<Book>> getMyBooks(Principal principal) {
         List<Book> books = bookService.getBooksByCurrentUser(principal.getName());
+        return ResponseEntity.ok(books);
+    }
+
+    @PatchMapping("/update")
+    public ResponseEntity<Book> updateBook(@Valid @RequestBody Book book, Principal principal){
+        String currentUserEmail = principal.getName();
+        Book updatedBook = bookService.updateBook(book, currentUserEmail);
+        return ResponseEntity.ok(updatedBook);
+    }
+
+    @GetMapping("/myTBR")
+    public ResponseEntity<List<Book>> getMyTBR(Principal principal) {
+        List<Book> books = bookService.getTBRByCurrentUser(principal.getName());
         return ResponseEntity.ok(books);
     }
 }

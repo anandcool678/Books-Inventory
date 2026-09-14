@@ -32,6 +32,8 @@ public class Book {
     private String source;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private boolean isRead;
+    private LocalDateTime readOn;
 
     public Book() {
     }
@@ -54,6 +56,8 @@ public class Book {
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;
+        this.isRead = false;
+        this.readOn = null;
     }
 
     public String getId() {
@@ -174,5 +178,20 @@ public class Book {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public boolean isRead() {
+        return isRead;
+    }
+
+    public void setRead(boolean read) {
+        isRead = read;
+    }
+    public LocalDateTime getReadOn() {
+        return readOn;
+    }
+
+    public void setReadOn(LocalDateTime readOn) {
+        this.readOn = readOn;
     }
 }
