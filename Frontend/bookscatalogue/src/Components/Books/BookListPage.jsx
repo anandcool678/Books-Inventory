@@ -172,11 +172,27 @@ const BookListPage = () => {
 
   const choosePreferredCamera = (cameras = []) => {
     if (!cameras.length) {
-      return { id: { facingMode: 'environment' }, label: 'environment' };
+      return null;
     }
 
     const rearCamera = cameras.find((camera) => /rear|back|environment/i.test(camera.label || '')) || cameras[0];
     return rearCamera;
+  };
+
+  const getCameraStartConfig = (camera) => {
+    if (!camera) {
+      return { facingMode: 'environment' };
+    }
+
+    if (typeof camera === 'string') {
+      return { deviceId: { exact: camera } };
+    }
+
+    if (camera && typeof camera === 'object' && 'id' in camera && typeof camera.id === 'string') {
+      return { deviceId: { exact: camera.id } };
+    }
+
+    return { facingMode: { ideal: 'environment' } };
   };
 
   const startScannerWithCamera = useCallback(
@@ -195,8 +211,10 @@ const BookListPage = () => {
         setCameraIndex(selectedIndex);
       }
 
+      const cameraConfig = getCameraStartConfig(selectedCameraId || selectedCamera);
+
       await scanner.start(
-        selectedCameraId,
+        cameraConfig,
         {
           fps: 10,
           qrbox: { width: 260, height: 150 },
@@ -271,9 +289,7 @@ const BookListPage = () => {
         setCameraList(availableCameras);
 
         const preferredCamera = choosePreferredCamera(availableCameras);
-        const cameraId = preferredCamera && preferredCamera.id ? preferredCamera.id : { facingMode: 'environment' };
-
-        await startScannerWithCamera(cameraId);
+        await startScannerWithCamera(preferredCamera);
       } catch (err) {
         if (cancelled) {
           return;
